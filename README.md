@@ -26,9 +26,24 @@ To get started with any of the projects, you'll need to have Python installed on
 1. Navigate to the project directory:
    ```bash
    cd path/to/project-directory
-	2.	Create a virtual environment:
-		python3 -m venv myenv
-	3.	Activate the virtual environment:
-		source myenv/bin/activate
-	4.	Run the project:
-		python project_file.py
+
+2. Create a virtual environment:
+   python3 -m venv myenv
+
+3. Activate the virtual environment:
+   source myenv/bin/activate
+
+4. Install the required dependencies:
+   pip install -r requirements.txt
+
+5. Run the project:
+   python project_file.py
+
+
+Contributing
+
+We welcome contributions! If you have a project or simulation you’d like to add, please fork the repository, create a new branch, and submit a pull request.
+
+License
+
+This repository is licensed under the MIT License. See the LICENSE file for more details.
