@@ -1,95 +1,123 @@
-import numpy as np #Import the numpy library for numerical operations
-import matplotlib.pyplot as plt #Import the plotting library
-import matplotlib.animation as animation #Import the animation module
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
-#Initial parameters
-circle_radius = 5 #Radius of the circle equals 5
-initial_position = np.array([0.0, 0.0]) #Start at the center of the circle
-initial_velocity = np.array([2.0, 5.0]) #Initial velocity of the ball
-g = 9.81 #Acceleration due to gravity in m/s^2
-dt = 0.01 #Time step for the simulation
-damping_factor = 0.99 #Damping factor to simulate energy loss
+# Initial parameters
+circle_radius = 5  # Radius of the circle
+num_balls = 1  # Number of balls
+g = 9.81  # Acceleration due to gravity in m/s^2
+dt = 0.01  # Time step for the simulation
+damping_factor = 0.99  # Damping factor to simulate energy loss
+ball_radius = 0.25  # Radius of each ball
+boundary_margin = 0.05  # Margin to account for the visual boundary width
+collision_margin = 0.01  # Margin to account for visual ball overlap
 
-#Generate random initial positons and velocities for the balls
-np.random.seed(0) #Seed the random number generator for reproducibility
-positions = (np.random.rand(num_balls, 2) - 0.5) * (circle_radius)
+# Generate random initial positions and velocities for the balls
+np.random.seed(0)
+positions = (np.random.rand(num_balls, 2) - 0.5) * 2 * (circle_radius - ball_radius)
+while len(positions) < num_balls:
+    extra_positions = (np.random.rand(num_balls - len(positions), 2) - 0.5) * 2 * (circle_radius - ball_radius)
+    extra_positions = extra_positions[np.linalg.norm(extra_positions, axis=1) < (circle_radius - ball_radius)]
+    positions = np.vstack((positions, extra_positions))
 
-#Print initial parameters for debugging
-print("Intitial position:\n", initial_position)
-print("Initial velocity:\n", initial_velocity)
+velocities = (np.random.rand(num_balls, 2) - 0.5) * 10
 
-#Function to update the position and velocity
-def update_position_velocity(position, velocity, circle_radius, dt, damping_factor):
-    #Update velcoity with gravity
-    velocity[1] -= g * dt #Gravity affects the y-component of velocity
+# Print initial parameters for debugging
+print("Initial positions:\n", positions)
+print("Initial velocities:\n", velocities)
 
-    #Update position based on velocity
-    next_position = position + velocity * dt
+# Function to update the positions and velocities
+def update_positions_velocities(positions, velocities, circle_radius, ball_radius, dt, damping_factor, boundary_margin, collision_margin):
+    effective_radius = circle_radius - boundary_margin
+    effective_diameter = 2 * ball_radius - collision_margin
+    num_balls = len(positions)
+    for i in range(num_balls):
+        # Update velocity with gravity
+        velocities[i][1] -= g * dt
 
-    #Check for collision with circular boundary
-    if np.linalg.norm(next_position) >= circle_radius:
-        #Reflect the velocity vector
-        normal = next_position / np.linalg.norm(next_position) #Unit vector in the direction of boundary
-        velocity = velocity - 2 * np.dot(velocity, normal) * normal #Reflect velocity
-        velocity *= damping_factor #Apply damping factor
+        # Update position based on velocity
+        next_position = positions[i] + velocities[i] * dt
 
-        #Move the ball to the boundary if it overshoots
-        next_position = position + velocity * dt
-        if np.linalg.norm(next_position) >= circle_radius: 
-            next_postion = normal * circle_radius
+        # Check for collision with the circular boundary
+        if np.linalg.norm(next_position) + ball_radius >= effective_radius:
+            normal = next_position / np.linalg.norm(next_position)
+            velocities[i] = velocities[i] - 2 * np.dot(velocities[i], normal) * normal
+            velocities[i] *= damping_factor
 
-    return next_position, velocity 
+            # Move the ball to the boundary if it overshoots
+            overshoot_distance = np.linalg.norm(next_position) + ball_radius - effective_radius
+            if overshoot_distance > 0:
+                next_position = normal * (effective_radius - ball_radius - overshoot_distance)
 
-#Example of updating position and velocity
-position = initial_position
-velocity = initial_velocity
+        positions[i] = next_position
 
-#Update position adn velocity fo rone time step
-position, velocity, = update_position_velocity(position, velocity, circle_radius, dt, damping_factor)
+    # Check for collisions between balls
+    for i in range(num_balls):
+        for j in range(i + 1, num_balls):
+            dist = np.linalg.norm(positions[i] - positions[j])
+            if dist < effective_diameter:
+                normal = (positions[i] - positions[j]) / dist
+                relative_velocity = velocities[i] - velocities[j]
+                velocity_along_normal = np.dot(relative_velocity, normal)
 
-#Print updated position and velocity for debugging
-print("Updated position:\n", position)
-print("Updated velocity:\n", velocity)
+                if velocity_along_normal > 0:
+                    continue
 
-#Set up the figure and axis
+                # Calculate impulse scalar
+                impulse_scalar = (2 * velocity_along_normal) / 2  # Equal mass assumption
+
+                # Apply impulses
+                velocities[i] -= impulse_scalar * normal
+                velocities[j] += impulse_scalar * normal
+
+                # Correct positions to prevent overlap
+                overlap = effective_diameter - dist
+                correction = normal * (overlap / 2)
+                positions[i] += correction
+                positions[j] -= correction
+
+                # Additional correction to avoid overlap after impulse
+                new_dist = np.linalg.norm(positions[i] - positions[j])
+                if new_dist < effective_diameter:
+                    correction = normal * (effective_diameter - new_dist) / 2
+                    positions[i] += correction
+                    positions[j] -= correction
+
+    return positions, velocities
+
+# Set up the figure and axis
 fig, ax = plt.subplots()
-ax.set_xlim(-circle_radius * 1.1, circle_radius * 1.1) #Set the x-axis limits
-ax.set_ylim(-circle_radius * 1.1, circle_radius * 1.1) #Set the y-axis limits
-ax.set_aspect('equal', 'box') #Ensure the aspect ration is equal
+ax.set_xlim(-circle_radius * 1.1, circle_radius * 1.1)
+ax.set_ylim(-circle_radius * 1.1, circle_radius * 1.1)
+ax.set_aspect('equal', 'box')
 
-#Set the background color to black
-fig.patch.set_facecolor('black') #Set figure background color
+fig.patch.set_facecolor('black')
 ax.set_facecolor('black')
 
-
-#Create a circle to represent the boundary
-circle = plt.Circle((0,0), circle_radius, color='white', fill=False)
+circle = plt.Circle((0, 0), circle_radius, color='white', fill=False)
 ax.add_artist(circle)
 
-#Create a scatter plot for the ball
-ball, = ax.plot([], [], 'o', color='red')
+balls_patches = [plt.Circle(pos, ball_radius, color='red') for pos in positions]
+for ball in balls_patches:
+    ax.add_patch(ball)
 
-#Hide the axis borders and ticks
 ax.spines['top'].set_color('none')
 ax.spines['right'].set_color('none')
 ax.spines['left'].set_color('none')
 ax.spines['bottom'].set_color('none')
 ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
-#Initialization function for the animation
 def init():
-    ball.set_data(initial_position[0], initial_position[1])
-    return ball,
+    for ball, pos in zip(balls_patches, positions):
+        ball.center = pos
+    return balls_patches
 
-#Update function for the animation
 def update(frame):
-    global position, velocity
-    position, velocity = update_position_velocity(position, velocity, circle_radius, dt, damping_factor)
-    ball.set_data(position[0], position[1])
-    return ball, 
+    global positions, velocities
+    positions, velocities = update_positions_velocities(positions, velocities, circle_radius, ball_radius, dt, damping_factor, boundary_margin, collision_margin)
+    for ball, pos in zip(balls_patches, positions):
+        ball.center = pos
+    return balls_patches
 
-#Create the animation
-ani = animation.FuncAnimation(fig, update, frames=200, init_func=init, interval=20, blit=True)
-
-#Show the animation
+ani = animation.FuncAnimation(fig, update, frames=200, init_func=init, interval=10, blit=True)
 plt.show()
